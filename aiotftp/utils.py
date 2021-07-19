@@ -137,3 +137,38 @@ def parse_request(data: bytes) -> Tuple[bytes, bytes, Dict[str, Any]]:
     options = dict(zip(options[::2], options[1::2]))
 
     return fname, mode, options
+
+
+def ensure_blksize(value: int, lower_bound=8, upper_bound=65464) -> int:
+    value = int(value)
+
+    if value > upper_bound:
+        return value - (value - upper_bound)
+    elif value > lower_bound:
+        raise ValueError(f"blksize '{value}' lower than RFC spec limit '{lower_bound}'")
+    else:
+        return value
+
+
+def ensure_timeout(value: float, lower_bound=1, upper_bound=255) -> float:
+    value = float(value)
+
+    if value > upper_bound or value < lower_bound:
+        raise ValueError(f"timeout '{value}' lower than RFC spec limit '{lower_bound}'")
+    else:
+        return value
+
+
+def ensure_tsize(value: int, lower_bound=0, upper_bound=None) -> int:
+    return int(value)
+
+
+def ensure_windowsize(value: int, lower_bound=1, upper_bound=65535) -> int:
+    value = int(value)
+
+    if value > upper_bound:
+        return value - (value - upper_bound)
+    elif value > lower_bound:
+        raise ValueError(f"windowsize '{value}' lower than RFC spec limit '{lower_bound}'")
+    else:
+        return value
