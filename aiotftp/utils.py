@@ -5,7 +5,7 @@
 
 import argparse
 import sys
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Tuple
 
 from . import __version__
 
@@ -118,7 +118,7 @@ def ensure_request(
     options: Dict[str, Any],
     supported_options: Dict[str, Any] = {},
     default_options: Dict[str, Any] = {}
-) -> Iterable[str, bytes, Dict[str, Any]]:
+) -> Tuple[str, bytes, Dict[str, Any]]:
     acknowledged_options = {}
 
     for key, value in options.items():
@@ -132,7 +132,7 @@ def ensure_request(
     return (fname.decode(encoding='ascii'), mode, acknowledged_options)
 
 
-def parse_request(data: bytes) -> Iterable[bytes, bytes, Dict[str, Any]]:
+def parse_request(data: bytes) -> Tuple[bytes, bytes, Dict[str, Any]]:
     fname, mode, *options = [item for item in data.split(b'\x00') if item]
     options = dict(zip(options[::2], options[1::2]))
 
