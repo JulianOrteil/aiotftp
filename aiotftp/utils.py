@@ -5,6 +5,7 @@
 
 import argparse
 import sys
+from typing import Any, Dict, Iterable
 
 from . import __version__
 
@@ -109,3 +110,30 @@ def parse_cli() -> argparse.Namespace:
         sys.exit(0)
 
     return args
+
+
+def ensure_request(
+    fname: bytes,
+    mode: bytes,
+    options: Dict[str, Any],
+    supported_options: Dict[str, Any] = {},
+    default_options: Dict[str, Any] = {}
+) -> Iterable[str, bytes, Dict[str, Any]]:
+    acknowledged_options = {}
+
+    for key, value in options.items():
+        if key in supported_options.keys():
+            try:
+                acknowledged_options[key] = supported_options[key](value)
+            except ValueError:
+                # TODO: Handle
+                pass
+
+    return (fname.decode(encoding='ascii'), mode, acknowledged_options)
+
+
+def parse_request(data: bytes) -> Iterable[bytes, bytes, Dict[str, Any]]:
+    fname, mode, *options = [item for item in data.split(b'\x00') if item]
+    options = dict(zip(options[::2], options[1::2]))
+
+    return fname, mode, options
