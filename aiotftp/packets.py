@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 
-from typing import Any, Dict, NamedTuple, Optional, Union
+from dataclasses import dataclass
+from typing import Any, Dict, Optional, Union
 
 from . import utils
 
@@ -76,7 +77,8 @@ class TFTPPacketFactory:
 
 class BaseTFTPPacket:
 
-    class PacketTypes(NamedTuple):
+    @dataclass
+    class PacketTypes:
         RRQ: str = 'RRQ'
         WRQ: str = 'WRQ'
         DAT: str = 'DAT'
