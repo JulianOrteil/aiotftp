@@ -9,6 +9,10 @@ import sys
 from . import __version__
 
 
+TFTP_MODE_CLIENT = 'client'
+TFTP_MODE_SERVER = 'server'
+
+
 def parse_cli() -> argparse.Namespace:
     """Parse cli arguments."""
 
@@ -24,7 +28,8 @@ def parse_cli() -> argparse.Namespace:
     )
 
     # Top-level parser
-    version = parser.add_argument('-v', '--version', action='store_true', help="print the version and exit")
+    parser.add_argument('-v', '--version', action='store_true', help="print the version and exit")
+    parser.add_argument('-V', '--verbose', action='store_true', help="print extra runtime information to stderr")
 
     # Client parser
     client_parser = mode_subparsers.add_parser(
