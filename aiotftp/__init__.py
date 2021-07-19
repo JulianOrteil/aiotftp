@@ -19,6 +19,7 @@ import sys
 from loguru import logger
 
 from . import utils
+from .protocols import TFTPClientFactory as TFTPClient, TFTPServerFactory as TFTPServer
 
 
 def main() -> int:
@@ -43,14 +44,16 @@ def main() -> int:
     # Create the server or client
     if args.mode == utils.TFTP_MODE_CLIENT:
         logger.info("Starting aiotftp in a client configuration")
+        logger.debug(f"Connecting to a server at '{args.server}:{args.port}'")
         endpoint = loop.create_datagram_endpoint(
-            lambda: None,
+            lambda: TFTPClient(),
             (args.server, args.port)
         )
     else:
         logger.info("Starting aiotftp in a server configuration")
+        logger.debug(f"Listening for connections at '{args.host}:{args.port}'")
         endpoint = loop.create_datagram_endpoint(
-            lambda: None,
+            lambda: TFTPServer(args.host, loop),
             (args.host, args.port)
         )
 
@@ -66,7 +69,7 @@ def main() -> int:
         transport.close()
         loop.close()
 
-    logger.info("aiotftp successfully shut down")
+    logger.success("aiotftp successfully shut down")
 
     # Return success to the OS
     return 0
