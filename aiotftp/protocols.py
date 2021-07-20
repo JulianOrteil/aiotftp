@@ -88,11 +88,13 @@ class BaseProtocolFactory(asyncio.DatagramProtocol):
         self._file_handler = None
 
     def connection_made(self, transport: asyncio.transports.DatagramTransport) -> None:
+        logger.info(f"New connection made from '{self._remote_addr[0]}:{self._remote_addr[1]}'")
         self._transport = transport
 
         self._start_communication()
 
     def connection_lost(self, exc: Optional[Exception]) -> None:
+        logger.info(f"Connection from '{self._remote_addr[0]}:{self._remote_addr[1]}' lost")
         self.reset_connection()
 
     def connection_timed_out(self) -> None:
@@ -198,12 +200,11 @@ class RRQProtocolFactory(BaseProtocolFactory):
         remote_addr: str,
         options: Dict[str, Any]
     ) -> None:
-        logger.info(f"Received a read connection from '{remote_addr}'")
         super().__init__(packet, file_handler_cls, remote_addr, options)
 
-    def _start_communication(self) -> None:
+    def _open_file_handler(self) -> None:
         self._counter = 1
-        self._file_handler = self._file_handler(self._filename, self._default_options.blksize)
+        self._file_handler = self._file_handler_cls(self._filename, self._default_options.blksize)
 
         if 'tsize' in self._r_options:
             self._r_options = self._file_handler.file_size()
@@ -272,6 +273,13 @@ class RRQProtocolFactory(BaseProtocolFactory):
     def _is_packet_in_windowsize(self, packet: TFTPDatPacket, windowsize: int) -> bool:
         return packet._block_no > (self._counter - windowsize) and packet._block_no <= self._counter
 
+    def _next_datagram(self) -> TFTPDatPacket:
+        return self._packet_factory.create(
+            TFTPDatPacket.PacketTypes.DAT,
+            block_no=self._counter,
+            data=self._file_handler.read()
+        )
+
     def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
         if self._default_options.windowsize > 1:
             self._datagram_received_windowsize(data, addr, self._default_options.windowsize)
@@ -288,7 +296,6 @@ class WRQProtocolFactory(BaseProtocolFactory):
         remote_addr: Tuple[str, int],
         options: Dict[str, Any]
     ) -> None:
-        logger.info(f"Received a write connection from '{remote_addr}'")
         super().__init__(packet, file_handler, remote_addr, options=options)
 
     def _next_datagram(self) -> TFTPAckPacket:
@@ -355,9 +362,7 @@ class BaseTFTPModeFactory(asyncio.DatagramProtocol):
         raise NotImplementedError
 
     def connection_made(self, transport: asyncio.transports.DatagramTransport) -> None:
-        logger.info("Waiting for a connection")
-
-        self._transport = transport
+        raise NotImplementedError
 
     def connection_lost(self, exc: Optional[Exception] = None) -> None:
         logger.info("Connection lost")
@@ -378,6 +383,9 @@ class TFTPClientFactory(BaseTFTPModeFactory):
         pass
 
 class TFTPServerFactory(BaseTFTPModeFactory):
+
+    def connection_made(self, transport: asyncio.transports.DatagramTransport) -> None:
+        self._transport = transport
 
     def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
         packet = self._packet_factory.decode(data)
