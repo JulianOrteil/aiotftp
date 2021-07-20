@@ -18,6 +18,7 @@ from .packets import (
     TFTPPacketFactory,
     TFTPRequestPacket
 )
+from .utils import ensure_blksize, ensure_timeout, ensure_tsize, ensure_windowsize
 
 
 class BaseProtocolFactory(asyncio.DatagramProtocol):
@@ -31,10 +32,10 @@ class BaseProtocolFactory(asyncio.DatagramProtocol):
 
     @dataclass
     class SupportedOptions:
-        blksize: Callable[..., Any]
-        timeout: Callable[..., Any]
-        tsize: Callable[..., Any]
-        windowsize: Callable[..., Any]
+        blksize: Callable[..., Any] = ensure_blksize
+        timeout: Callable[..., Any] = ensure_timeout
+        tsize: Callable[..., Any] = ensure_tsize
+        windowsize: Callable[..., Any] = ensure_windowsize
 
     _default_options: DefaultOptions
     _supported_options: SupportedOptions
@@ -61,6 +62,8 @@ class BaseProtocolFactory(asyncio.DatagramProtocol):
     def connection_made(self, transport: asyncio.transports.DatagramTransport) -> None:
         self._transport = transport
 
+        self._start_communication()
+
     def connection_lost(self, exc: Optional[Exception]) -> None:
         return super().connection_lost(exc)
 
@@ -69,6 +72,9 @@ class BaseProtocolFactory(asyncio.DatagramProtocol):
 
     def error_received(self, exc: Exception) -> None:
         return super().error_received(exc)
+
+    def _start_communication(self) -> None:
+        raise NotImplementedError
 
 
 class RRQProtocolFactory(BaseProtocolFactory):
