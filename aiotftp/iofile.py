@@ -6,6 +6,9 @@
 import os
 from io import TextIOWrapper
 from pathlib import Path
+from typing import Optional
+
+from .netascii import NETASCII
 
 
 def ensure_path(path: str):
@@ -30,15 +33,21 @@ class BaseFileIO:
     _chunk_size: int
     _finished: bool
 
-    def __init__(self, path: str, chunk_size=0) -> None:
+    def __init__(self, path: str, chunk_size=0, mode: Optional[str] = None) -> None:
         self._path = ensure_path(path)
         self._chunk_size = chunk_size
         self._finished = False
         self._file = self._open()
 
+        if mode == 'netascii':
+            self._file = NETASCII(self._file)
+
     def __del__(self) -> None:
-        if self._file and not self._file.closed:
-            self._file.close()
+        try:
+            if self._file and not self._file.closed:
+                self._file.close()
+        except AttributeError:
+            pass
 
     def _open(self) -> TextIOWrapper:
         raise NotImplementedError
