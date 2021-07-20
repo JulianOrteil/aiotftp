@@ -51,7 +51,7 @@ def main() -> int:
         )
     else:
         logger.info("Starting aiotftp in a server configuration")
-        logger.debug(f"Listening for connections at '{args.host}:{args.port}'")
+        logger.info(f"Listening for connections at '{args.host}:{args.port}'")
         endpoint = loop.create_datagram_endpoint(
             lambda: TFTPServer(args.host, loop),
             (args.host, args.port)
