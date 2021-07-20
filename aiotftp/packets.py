@@ -74,6 +74,22 @@ class TFTPPacketFactory:
         else:
             raise ValueError(f"Unknown packet type '{type}'")
 
+    @classmethod
+    def create_err_file_exists(cls) -> TFTPErrPacket:
+        return cls.create(BaseTFTPPacket.PacketTypes.ERR, code=6, message='File already exists')
+
+    @classmethod
+    def create_err_access_violation(cls) -> TFTPErrPacket:
+        return cls.create(BaseTFTPPacket.PacketTypes.ERR, code=2, message='Permission denied')
+
+    @classmethod
+    def create_err_file_404(cls) -> TFTPErrPacket:
+        return cls.create(BaseTFTPPacket.PacketTypes.ERR, code=1, message='File not found')
+
+    @classmethod
+    def create_err_unknown_tid(cls) -> TFTPErrPacket:
+        return cls.create(BaseTFTPPacket.PacketTypes.ERR, code=5, message='Unrecognized transfer id')
+
 
 class BaseTFTPPacket:
 
@@ -92,6 +108,23 @@ class BaseTFTPPacket:
         ACK_code: bytes = b'\x00\x04'
         ERR_code: bytes = b'\x00\x05'
         OCK_code: bytes = b'\x00\x06'
+
+        @classmethod
+        def encode(cls, code: str) -> bytes:
+            if code == cls.RRQ:
+                return cls.RRQ_code
+            elif code == cls.WRQ:
+                return cls.WRQ_code
+            elif code == cls.DAT:
+                return cls.DAT_code
+            elif code == cls.ACK:
+                return cls.ACK_code
+            elif code == cls.ERR:
+                return cls.ERR_code
+            elif code == cls.OCK:
+                return cls.OCK_code
+            else:
+                raise ValueError(f"Unrecognized packet code '{code}'")
 
         @classmethod
         def decode(cls, code: bytes) -> str:
@@ -136,6 +169,9 @@ class BaseTFTPPacket:
 
     def encode(self) -> bytes:
         raise NotImplementedError
+
+    def is_correct_sequence(self, expected_block_no: int) -> bool:
+        return expected_block_no == self._block_no
 
     def is_ack(self) -> bool:
         return self._type == self.PacketTypes.ACK
@@ -191,7 +227,10 @@ class TFTPAckPacket(BaseTFTPPacket):
         self._block_no = kwargs['block_no']
 
     def encode(self) -> bytes:
-        return b''.join([self.PacketTypes.ACK, BaseTFTPPacket.pack_short(self._block_no)])
+        return b''.join([
+            self.PacketTypes.encode(self._type),
+            BaseTFTPPacket.pack_short(self._block_no)
+        ])
 
 
 class TFTPDatPacket(BaseTFTPPacket):
@@ -207,14 +246,15 @@ class TFTPDatPacket(BaseTFTPPacket):
         self._data = kwargs['data']
 
     def encode(self) -> bytes:
-        return b''.join(
-            [self.PacketTypes.DAT, BaseTFTPPacket.pack_short(self._block_no), self._data]
-        )
+        return b''.join([
+            self.PacketTypes.encode(self._type),
+            BaseTFTPPacket.pack_short(self._block_no), self._data
+        ])
 
 
 class TFTPErrPacket(BaseTFTPPacket):
 
-    _code: object
+    _code: int
     _message: str
 
     def __init__(self, **kwargs: Dict[str, Any]) -> None:
@@ -226,7 +266,7 @@ class TFTPErrPacket(BaseTFTPPacket):
 
     def encode(self) -> bytes:
         return b''.join([
-            self.PacketTypes.ERR,
+            self.PacketTypes.encode(self._type),
             BaseTFTPPacket.pack_short(self._code),
             self._message.encode('ascii'),
             b'\x00'
@@ -245,7 +285,7 @@ class TFTPOckPacket(BaseTFTPPacket):
 
     def encode(self) -> bytes:
         return b''.join([
-            self.PacketTypes.OCK,
+            self.PacketTypes.encode(self._type),
             BaseTFTPPacket.serialize_options(self._options),
             b'\x00'
         ])
@@ -253,9 +293,9 @@ class TFTPOckPacket(BaseTFTPPacket):
 
 class TFTPRequestPacket(BaseTFTPPacket):
 
-    _fname: bytes
-    _mode: bytes
-    _options: bytes
+    _fname: str
+    _mode: str
+    _options: Dict[str, Any]
 
     def __init__(
         self,
@@ -266,7 +306,7 @@ class TFTPRequestPacket(BaseTFTPPacket):
 
         self._type = type
         self._fname = kwargs['fname']
-        self._mode = kwargs['mode']
+        self._mode = kwargs['mode'].decode()
         self._options = kwargs.get('options', {})
 
     def encode(self) -> bytes:
