@@ -51,6 +51,7 @@ def parse_cli() -> argparse.Namespace:
         '-P',
         '--port',
         default=69,
+        type=int,
         help="the port the TFTP server is listening on"
     )
     client_parser.add_argument(

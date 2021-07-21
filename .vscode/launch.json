@@ -5,6 +5,30 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "aiotftp: Launch Client",
+            "type": "python",
+            "request": "launch",
+            "module": "aiotftp",
+            "args": [
+                "client",
+                "PUT",
+                "127.0.0.1",
+                "tox.ini",
+                "tox1.ini",
+                "-P 69"
+            ]
+        },
+        {
+            "name": "aiotftp: Launch Server",
+            "type": "python",
+            "request": "launch",
+            "module": "aiotftp",
+            "args": [
+                "server",
+                "-P 69"
+            ]
+        },
+        {
             "name": "aiotftp: Launch",
             "type": "python",
             "request": "launch",

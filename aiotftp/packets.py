@@ -311,7 +311,7 @@ class TFTPRequestPacket(BaseTFTPPacket):
 
     def encode(self) -> bytes:
         packet = [
-            self.PacketTypes.validate(self._type) + bytes(self._fname, 'ascii'),
+            self.PacketTypes.encode(self._type) + bytes(self._fname, 'ascii'),
             bytes(self._mode, 'ascii'),
             BaseTFTPPacket.serialize_options(self._options)
         ]

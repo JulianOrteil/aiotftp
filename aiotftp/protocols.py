@@ -3,6 +3,7 @@
 """Async protocols for sending and receiving data."""
 
 
+import argparse
 import asyncio
 from dataclasses import asdict, dataclass
 from io import TextIOWrapper
@@ -12,6 +13,7 @@ from loguru import logger
 
 from .iofile import FileReader, FileWriter
 from .packets import (
+    BaseTFTPPacket,
     TFTPAckPacket,
     TFTPDatPacket,
     TFTPErrPacket,
@@ -353,56 +355,6 @@ class BaseTFTPModeFactory(asyncio.DatagramProtocol):
         self,
         packet: TFTPRequestPacket
     ) -> Union[RRQProtocolFactory, WRQProtocolFactory]:
-        raise NotImplementedError
-
-    def get_file_handler(
-        self,
-        packet: TFTPRequestPacket
-    ) -> Callable[..., Union[FileReader, FileWriter]]:
-        raise NotImplementedError
-
-    def connection_made(self, transport: asyncio.transports.DatagramTransport) -> None:
-        raise NotImplementedError
-
-    def connection_lost(self, exc: Optional[Exception] = None) -> None:
-        logger.info("Connection lost")
-
-    def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
-        raise NotImplementedError
-
-
-class TFTPClientFactory(BaseTFTPModeFactory):
-
-    def get_protocol(self, request) -> Union[RRQProtocolFactory, WRQProtocolFactory]:
-        return super().get_protocol(request)
-
-    def get_file_handler(
-        self,
-        packet: TFTPRequestPacket
-    ) -> Callable[..., Union[FileReader, FileWriter]]:
-        pass
-
-class TFTPServerFactory(BaseTFTPModeFactory):
-
-    def connection_made(self, transport: asyncio.transports.DatagramTransport) -> None:
-        self._transport = transport
-
-    def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
-        packet = self._packet_factory.decode(data)
-        protocol = self.get_protocol(packet)
-        file_handler = self.get_file_handler(packet)
-
-        io_endpoint = self._loop.create_datagram_endpoint(
-            lambda: protocol(data, file_handler, addr, self._kwargs),
-            (self._host, 0)
-        )
-
-        self._loop.create_task(io_endpoint)
-
-    def get_protocol(
-        self,
-        packet: TFTPRequestPacket
-    ) -> Union[RRQProtocolFactory, WRQProtocolFactory]:
         if packet.is_rrq():
            return RRQProtocolFactory
         elif packet.is_wrq():
@@ -422,3 +374,129 @@ class TFTPServerFactory(BaseTFTPModeFactory):
             return lambda path, options: FileWriter(
                 path, options, packet._mode
             )
+
+    def connection_made(self, transport: asyncio.transports.DatagramTransport) -> None:
+        self._transport = transport
+
+    def connection_lost(self, exc: Optional[Exception] = None) -> None:
+        logger.info("Connection lost")
+
+    def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
+        raise NotImplementedError
+
+
+class TFTPClientFactory(BaseTFTPModeFactory):
+
+    @dataclass
+    class DefaultOptions:
+        timeout: float = 5.0
+        retries: int = 5
+
+    _finished: asyncio.Event
+
+    _default_options: DefaultOptions
+    _retransmitter: asyncio.TimerHandle
+
+    _transfer_mode: str
+    _remote_addr: Tuple[str, int]
+    _source_filename: str
+    _destination_filename: str
+
+    def __init__(
+        self,
+        remote_addr: Tuple[str, int],
+        loop: asyncio.ProactorEventLoop,
+        **kwargs: Dict[str, Any]
+    ) -> None:
+        super().__init__(remote_addr[0], loop, **kwargs)
+
+        self._finished = asyncio.Event()
+
+        self._default_options = self.DefaultOptions()
+        self._retransmitter = None
+
+        self._remote_addr = remote_addr
+        self._transfer_mode = TFTPRequestPacket.PacketTypes.WRQ if kwargs['transfer_mode'].upper() == 'PUT' else TFTPRequestPacket.PacketTypes.RRQ
+        self._source_filename = kwargs['source']
+        self._destination_filename = kwargs['destination']
+
+    def connection_made(self, transport: asyncio.transports.DatagramTransport) -> None:
+        self._transport = transport
+
+        packet = self._packet_factory.create(
+            TFTPRequestPacket.PacketTypes.validate(self._transfer_mode),
+            fname=(self._destination_filename if self._transfer_mode == TFTPRequestPacket.PacketTypes.WRQ else self._source_filename),
+            mode=b'netascii'
+        )
+
+        self._send_packet(packet.encode())
+
+    def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
+        packet = self._packet_factory.decode(data)
+        protocol = self.get_protocol()
+        file_handler = self.get_file_handler()
+
+        io_endpoint = self._loop.create_datagram_endpoint(
+            lambda: protocol(data, file_handler, addr, self._kwargs),
+            remote_addr=self._remote_addr
+        )
+
+        self._loop.create_task(io_endpoint)
+        self._reset_retransmitter()
+
+    def error_received(self, exc: Exception) -> None:
+        print(exc)
+        return super().error_received(exc)
+
+    def connection_lost(self, exc: Optional[Exception]) -> None:
+        print("Connection lost")
+
+    def _send_packet(self, packet: bytes, retries=0) -> None:
+        if retries < self._default_options.retries:
+            logger.debug("Sending TFTP transmission start request..")
+            self._transport.sendto(packet)
+            self._retransmitter = asyncio.get_event_loop().call_later(
+                self._default_options.timeout, self._send_packet, packet, retries + 1
+            )
+        else:
+            logger.error("Connect request failed")
+            self._finished.set()
+
+    def _reset_retransmitter(self) -> None:
+        if self._retransmitter:
+            self._retransmitter.cancel()
+
+    def get_protocol(
+        self
+    ) -> Union[RRQProtocolFactory, WRQProtocolFactory]:
+        if self._transfer_mode == BaseTFTPPacket.PacketTypes.WRQ:
+           return RRQProtocolFactory
+        else:
+            return WRQProtocolFactory
+
+    def get_file_handler(
+        self
+    ) -> Callable[..., Union[FileReader, FileWriter]]:
+        if self._transfer_mode == BaseTFTPPacket.PacketTypes.WRQ:
+            return lambda path, options: FileReader(
+                path, options, 'netascii'
+            )
+        else:
+            return lambda path, options: FileWriter(
+                path, options, 'netascii'
+            )
+
+
+class TFTPServerFactory(BaseTFTPModeFactory):
+
+    def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
+        packet = self._packet_factory.decode(data)
+        protocol = self.get_protocol(packet)
+        file_handler = self.get_file_handler(packet)
+
+        io_endpoint = self._loop.create_datagram_endpoint(
+            lambda: protocol(data, file_handler, addr, self._kwargs),
+            (self._host, 0)
+        )
+
+        self._loop.create_task(io_endpoint)

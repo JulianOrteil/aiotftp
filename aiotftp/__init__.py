@@ -44,17 +44,17 @@ def main() -> int:
     # Create the server or client
     if args.mode == utils.TFTP_MODE_CLIENT:
         logger.info("Starting aiotftp in a client configuration")
-        logger.debug(f"Connecting to a server at '{args.server}:{args.port}'")
+        logger.info(f"Connecting to a server at '{args.server}:{args.port}'")
         endpoint = loop.create_datagram_endpoint(
-            lambda: TFTPClient(),
-            (args.server, args.port)
+            lambda: TFTPClient((args.server, args.port), loop, **args.__dict__),
+            remote_addr=(args.server, args.port)
         )
     else:
         logger.info("Starting aiotftp in a server configuration")
         logger.info(f"Listening for connections at '{args.host}:{args.port}'")
         endpoint = loop.create_datagram_endpoint(
             lambda: TFTPServer(args.host, loop),
-            (args.host, args.port)
+            local_addr=(args.host, args.port)
         )
 
     # Submit endpoint creation
@@ -68,8 +68,6 @@ def main() -> int:
     finally:
         transport.close()
         loop.close()
-
-    logger.success("aiotftp successfully shut down")
 
     # Return success to the OS
     return 0
